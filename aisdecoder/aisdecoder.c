@@ -34,9 +34,13 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdio.h>
+
+#include <pthread.h>
 //#include "config.h"
 #include "sounddecoder.h"
-#include "callbacks.h"
+#include "lib/callbacks.h"
+
+// TODO: add context struct to avoid globals
 
 #define MAX_BUFFER_LENGTH 2048
 //#define MAX_BUFFER_LENGTH 8190
@@ -49,9 +53,60 @@ static unsigned int buffer_count=0;
 static int debug_nmea;
 static int sock;
 static struct addrinfo* addr=NULL;
+// messages can be retrived from a different thread
+static pthread_mutex_t message_mutex;
 
 static int initSocket(const char *host, const char *portname);
 
+// queue of decoded ais messages
+struct ais_message {
+    char *buffer;
+    struct ais_message *next;
+} *ais_messages_head, *ais_messages_tail, *last_message;
+
+static void append_message(const char *buffer)
+{
+    struct ais_message *m = malloc(sizeof *m);
+
+    m->buffer = strdup(buffer);
+    m->next = NULL;
+    pthread_mutex_lock(&message_mutex);
+
+    // enqueue
+    if(!ais_messages_head)
+        ais_messages_head = m;
+    else
+        ais_messages_tail->next = m;
+    ais_messages_tail = m;
+    pthread_mutex_unlock(&message_mutex);
+}
+
+static void free_message(struct ais_message *m)
+{
+    if(m) {
+        free(m->buffer);
+        free(m);
+    }
+}
+
+const char *aisdecoder_next_message()
+{
+    free_message(last_message);
+    last_message = NULL;
+
+    pthread_mutex_lock(&message_mutex);
+    if(!ais_messages_head) {
+        pthread_mutex_unlock(&message_mutex);
+        return NULL;
+    }
+
+    // dequeue
+    last_message = ais_messages_head;
+    ais_messages_head = ais_messages_head->next;
+    
+    pthread_mutex_unlock(&message_mutex);
+    return last_message->buffer;
+}
 
 void sound_level_changed(float level, int channel, unsigned char high) {
     if (high != 0)
@@ -64,8 +119,10 @@ void nmea_sentence_received(const char *sentence,
                           unsigned int length,
                           unsigned char sentences,
                           unsigned char sentencenum) {
+    append_message(sentence);
+
     if (sentences == 1) {
-        if (sendto(sock, sentence, length, 0, addr->ai_addr, addr->ai_addrlen) == -1) abort();
+        if (sock && sendto(sock, sentence, length, 0, addr->ai_addr, addr->ai_addrlen) == -1) abort();
         if (debug_nmea) fprintf(stderr, "%s", sentence);
     } else {
         if (buffer_count + length < MAX_BUFFER_LENGTH) {
@@ -76,7 +133,7 @@ void nmea_sentence_received(const char *sentence,
         }
 
         if (sentences == sentencenum && buffer_count > 0) {
-            if (sendto(sock, buffer, buffer_count, 0, addr->ai_addr, addr->ai_addrlen) == -1) abort();
+            if (sock && sendto(sock, buffer, buffer_count, 0, addr->ai_addr, addr->ai_addrlen) == -1) abort();
             if (debug_nmea) fprintf(stderr, "%s", buffer);
             buffer_count=0;
         };
@@ -84,14 +141,16 @@ void nmea_sentence_received(const char *sentence,
 }
 int init_ais_decoder(char * host, char * port ,int show_levels,int _debug_nmea,int buf_len,int time_print_stats){
 	debug_nmea=_debug_nmea;
+	pthread_mutex_init(&message_mutex, NULL);
 	if(debug_nmea)
 		fprintf(stderr,"Log NMEA sentences to console ON\n");
 	else
 		fprintf(stderr,"Log NMEA sentences to console OFF\n");
-		
-    if (!initSocket(host, port)) {
+        
+    if (host && port && !initSocket(host, port)) {
         return EXIT_FAILURE;
     }
+
     if (show_levels) on_sound_level_changed=sound_level_changed;
     on_nmea_sentence_received=nmea_sentence_received;
 	initSoundDecoder(buf_len,time_print_stats); 
@@ -104,6 +163,19 @@ void run_rtlais_decoder(short * buff, int len)
 }
 int free_ais_decoder(void)
 {
+    pthread_mutex_destroy(&message_mutex);
+
+    // free all stored messages
+    free_message(last_message);
+    last_message = NULL;
+   
+    while(ais_messages_head) {
+        struct ais_message *m = ais_messages_head;
+        ais_messages_head = ais_messages_head->next;
+
+        free_message(m);
+    }
+    
     freeSoundDecoder();
     freeaddrinfo(addr);
 #ifdef WIN32

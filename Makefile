@@ -1,4 +1,4 @@
-CFLAGS?=-O2 -g -Wall -W 
+CFLAGS?=-O0 -g -Wall -W 
 CFLAGS+= -I./aisdecoder -I ./aisdecoder/lib
 LDFLAGS+=-lpthread -lm
 
@@ -39,7 +39,7 @@ endif
 
 CC?=gcc
 SOURCES= \
-	rtl_ais.c convenience.c \
+	main.c rtl_ais.c convenience.c \
 	./aisdecoder/aisdecoder.c \
 	./aisdecoder/sounddecoder.c \
 	./aisdecoder/lib/receiver.c \

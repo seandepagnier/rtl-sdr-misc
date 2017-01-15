@@ -145,6 +145,12 @@ int main(int argc, char **argv)
 		case 'P':
 			config.port=strdup(optarg);
 			break;
+                case 'T':
+                        config.use_tcp_listener=1;
+                        break;
+                case 't':
+                        config.tcp_keep_ais_time = atoi(optarg);
+                        break;
 		case 'h':
 			config.host=strdup(optarg);
 			break;

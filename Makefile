@@ -1,5 +1,5 @@
-CFLAGS?=-O3 -g -Wall -W 
-CFLAGS+= -I./aisdecoder -I ./aisdecoder/lib
+CFLAGS?=-O2 -g -Wall -W 
+CFLAGS+= -I./aisdecoder -I ./aisdecoder/lib -I./tcp_listener
 LDFLAGS+=-lpthread -lm
 
 UNAME := $(shell uname)
@@ -23,7 +23,6 @@ RTLSDR_LIB=/tmp/rtl-sdr/build/src
 LIBUSB_INCLUDE=/tmp/libusb/include/libusb-1.0
 LIBUSB_LIB=/tmp/libusb/lib
 
-
 ifeq ($(UNAME),Darwin)
 #Conditional for OSX
 CFLAGS+= -I/usr/local/include/ -I$(LIBUSB_INCLUDE) -I$(RTLSDR_INCLUDE)
@@ -45,7 +44,8 @@ SOURCES= \
 	./aisdecoder/lib/receiver.c \
 	./aisdecoder/lib/protodec.c \
 	./aisdecoder/lib/hmalloc.c \
-	./aisdecoder/lib/filter.c
+	./aisdecoder/lib/filter.c \
+	./tcp_listener/tcp_listener.c
 
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=rtl_ais
@@ -59,4 +59,4 @@ $(EXECUTABLE): $(OBJECTS)
 	$(CC) -c $< -o $@ $(CFLAGS)
 
 clean:
-	rm -f $(OBJECTS) $(EXECUTABLE)
+	rm -f $(OBJECTS) $(EXECUTABLE) $(EXECUTABLE).exe

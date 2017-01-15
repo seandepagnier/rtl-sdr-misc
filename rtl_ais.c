@@ -475,6 +475,8 @@ void rtl_ais_default_config(struct rtl_ais_config *config)
         config->use_internal_aisdecoder=1;
         config->seconds_for_decoder_stats=0;
         
+        config->use_tcp_listener = 0, config->tcp_keep_ais_time = 15;
+
         /* Aisdecoder */
         config->show_levels=0;
         config->debug_nmea = 0;
@@ -589,11 +591,12 @@ struct rtl_ais_context *rtl_ais_start(struct rtl_ais_config *config)
 			if (!ctx->file) {
 				fprintf(stderr, "Failed to open %s\n", config->filename);
 				return NULL;
+                            fprintf(stderr, "Failed to open %s\n", config->filename);
 			}
 		}
 	}
 	else{ // Internal AIS decoder
-		int ret=init_ais_decoder(config->host,config->port,config->show_levels,config->debug_nmea,ctx->stereo.bl_len,config->seconds_for_decoder_stats);
+            int ret=init_ais_decoder(config->host,config->port,config->show_levels,config->debug_nmea,ctx->stereo.bl_len,config->seconds_for_decoder_stats, config->use_tcp_listener, config->tcp_keep_ais_time);
 		if(ret != 0){
 			fprintf(stderr,"Error initializing built-in AIS decoder\n");
 			rtlsdr_cancel_async(ctx->dev);
@@ -603,7 +606,7 @@ struct rtl_ais_context *rtl_ais_start(struct rtl_ais_config *config)
                 ctx->file = NULL;
 	}
         ctx->use_internal_aisdecoder = config->use_internal_aisdecoder;
-        
+
 	/* Set the tuner gain */
 	if (config->gain == AUTO_GAIN) {
 		verbose_auto_gain(ctx->dev);
@@ -672,6 +675,7 @@ void rtl_ais_cleanup(struct rtl_ais_context *ctx)
 	}
 
 	rtlsdr_cancel_async(ctx->dev);
+	safe_cond_signal(&ctx->ready, &ctx->ready_m);
 	pthread_cond_destroy(&ctx->ready);
 	pthread_mutex_destroy(&ctx->ready_m);
 

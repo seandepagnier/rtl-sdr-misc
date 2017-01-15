@@ -1,4 +1,4 @@
-CFLAGS?=-O0 -g -Wall -W 
+CFLAGS?=-O3 -g -Wall -W 
 CFLAGS+= -I./aisdecoder -I ./aisdecoder/lib
 LDFLAGS+=-lpthread -lm
 
